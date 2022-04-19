@@ -21,8 +21,14 @@ from ggshield.core.utils import clean_url
     type=str,
     help="URL of the instance to authenticate to.",
 )
+@click.option(
+    "--token-name",
+    required=False,
+    type=str,
+    help="Name of new token.",
+)
 @click.pass_context
-def login_cmd(ctx: click.Context, method: str, instance: str) -> int:
+def login_cmd(ctx: click.Context, method: str, instance: str, token_name: str) -> int:
     """
     Authenticate to your GitGuardian account.
 
@@ -86,7 +92,7 @@ def login_cmd(ctx: click.Context, method: str, instance: str) -> int:
         click.echo("Authentication was successful.")
     elif method == "web":
         if os.getenv("IS_WEB_AUTH_ENABLED", False):
-            OAuthClient(config, instance).oauth_process()
+            OAuthClient(config, instance).oauth_process(token_name=token_name)
         else:
             raise click.ClickException("The web auth login method is not enabled.")
     return 0
