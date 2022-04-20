@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 
 import click
 
@@ -27,8 +28,21 @@ from ggshield.core.utils import clean_url
     type=str,
     help="Name of new token.",
 )
+@click.option(
+    "--lifetime",
+    required=False,
+    type=click.IntRange(0),
+    default=None,
+    help="Amount of days before the token expires. 0 means the token never expires.",
+)
 @click.pass_context
-def login_cmd(ctx: click.Context, method: str, instance: str, token_name: str) -> int:
+def login_cmd(
+    ctx: click.Context,
+    method: str,
+    instance: str,
+    token_name: Optional[str],
+    lifetime: Optional[int],
+) -> int:
     """
     Authenticate to your GitGuardian account.
 
@@ -92,7 +106,9 @@ def login_cmd(ctx: click.Context, method: str, instance: str, token_name: str) -
         click.echo("Authentication was successful.")
     elif method == "web":
         if os.getenv("IS_WEB_AUTH_ENABLED", False):
-            OAuthClient(config, instance).oauth_process(token_name=token_name)
+            OAuthClient(config, instance).oauth_process(
+                token_name=token_name, lifetime=lifetime
+            )
         else:
             raise click.ClickException("The web auth login method is not enabled.")
     return 0

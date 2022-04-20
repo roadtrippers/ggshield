@@ -247,12 +247,16 @@ class TestAuthLoginWeb:
         self._client_get_mock.assert_called_once()
 
     @pytest.mark.parametrize("token_name", [None, "some token name"])
+    @pytest.mark.parametrize("lifetime", [None, 0, 1, 365])
     @pytest.mark.parametrize("used_port_count", [0, 1, 10])
     def test_valid_process(
-        self, used_port_count, token_name, cli_fs_runner, monkeypatch
+        self, used_port_count, lifetime, token_name, cli_fs_runner, monkeypatch
     ):
         self.prepare_mocks(
-            monkeypatch, token_name=token_name, used_port_count=used_port_count
+            monkeypatch,
+            token_name=token_name,
+            lifetime=lifetime,
+            used_port_count=used_port_count,
         )
         exit_code, output = self.run_cmd(cli_fs_runner)
         assert exit_code == 0, output
@@ -273,6 +277,7 @@ class TestAuthLoginWeb:
         self,
         monkeypatch,
         token_name=None,
+        lifetime=None,
         authorization_code="some_authorization_code",
         used_port_count=0,
         is_exchange_ok=True,
@@ -286,8 +291,9 @@ class TestAuthLoginWeb:
         config = Config()
         assert len(config.auth_config.instances) == 0
 
-        # original token_name param
+        # original token params
         self._token_name = token_name
+        self._lifetime = lifetime
 
         # token name generated if passed as None
         self._generated_token_name = (
@@ -355,6 +361,10 @@ class TestAuthLoginWeb:
         cmd = ["auth", "login", "--method=web"]
         if self._token_name is not None:
             cmd.append(f"--token-name={self._token_name}")
+
+        if self._lifetime is not None:
+            cmd.append(f"--lifetime={self._lifetime}")
+
         # run cli command
         result = cli_fs_runner.invoke(cli, cmd, color=False, catch_exceptions=True)
 
@@ -435,9 +445,12 @@ class TestAuthLoginWeb:
         assert url == "https://api.gitguardian.com/oauth/token"
 
         request_body = urlparse.parse_qs(payload)
-        assert "name" in request_body
 
+        assert "name" in request_body
         assert request_body["name"][0] == self._generated_token_name
+
+        assert "lifetime" in request_body
+        assert request_body["lifetime"][0] == str(self._lifetime)
 
     @staticmethod
     def _get_oauth_client_class(callback_url):

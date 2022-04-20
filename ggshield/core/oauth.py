@@ -12,7 +12,7 @@ import requests
 from oauthlib.oauth2 import OAuth2Error, WebApplicationClient
 
 from .client import retrieve_client
-from .config import AccountConfig, Config
+from .config import AccountConfig, Config, InstanceConfig
 
 
 CLIENT_ID = "ggshield_oauth"
@@ -45,7 +45,9 @@ class OAuthClient:
 
         self._generate_pkce_pair()
 
-    def oauth_process(self, token_name: Optional[str] = None) -> None:
+    def oauth_process(
+        self, token_name: Optional[str] = None, lifetime: Optional[int] = None
+    ) -> None:
         """
         Handle the whole oauth process which includes
         - opening the user's webbrowser to GitGuardian login page
@@ -57,6 +59,10 @@ class OAuthClient:
         if token_name is None:
             token_name = "ggshield token " + datetime.today().strftime("%Y-%m-%d")
         self._token_name = token_name
+
+        if lifetime is None:
+            lifetime = self.default_token_lifetime
+        self._lifetime = lifetime
 
         self._prepare_server()
         self._redirect_to_login()
@@ -172,6 +178,8 @@ class OAuthClient:
         """
 
         request_params = {"name": self._token_name}
+        if self._lifetime is not None:
+            request_params["lifetime"] = self._lifetime  # type: ignore
 
         request_body = self._oauth_client.prepare_request_body(
             code=authorization_code,
@@ -213,9 +221,24 @@ class OAuthClient:
             token_name=api_token_data.get("name", ""),
             type=api_token_data.get("type", ""),
         )
-        instance_config = self.config.auth_config.instances[self.instance]
-        instance_config.account = account_config
+        self.instance_config.account = account_config
         self.config.save()
+
+    @property
+    def instance_config(self) -> InstanceConfig:
+        return self.config.auth_config.instances[self.instance]
+
+    @property
+    def default_token_lifetime(self) -> Optional[int]:
+        """
+        return the default token lifetime saved in the instance config.
+        if None, this will be interpreted as no expiry.
+        """
+        default_lifetime = self.instance_config.default_token_lifetime
+        if default_lifetime is not None:
+            return default_lifetime.days
+
+        return None
 
     @property
     def redirect_uri(self) -> str:
