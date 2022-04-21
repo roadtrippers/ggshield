@@ -1,4 +1,3 @@
-import os
 from typing import Optional
 
 import click
@@ -105,10 +104,7 @@ def login_cmd(
         config.save()
         click.echo("Authentication was successful.")
     elif method == "web":
-        if os.getenv("IS_WEB_AUTH_ENABLED", False):
-            OAuthClient(config, instance).oauth_process(
-                token_name=token_name, lifetime=lifetime
-            )
-        else:
-            raise click.ClickException("The web auth login method is not enabled.")
+        OAuthClient(config, instance).oauth_process(
+            token_name=token_name, lifetime=lifetime
+        )
     return 0
