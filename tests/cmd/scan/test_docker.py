@@ -16,8 +16,8 @@ DOCKER__INCOMPLETE_MANIFEST_EXAMPLE_PATH = (
 
 
 class TestDockerCMD:
-    @patch("ggshield.cmd.scan.docker.docker_save_to_tmp")
-    @patch("ggshield.cmd.scan.docker.docker_scan_archive")
+    @patch("ggshield.cmd.secret.scan.docker.docker_save_to_tmp")
+    @patch("ggshield.cmd.secret.scan.docker.docker_scan_archive")
     def test_docker_scan(
         self, scan_mock: Mock, save_mock, cli_fs_runner: click.testing.CliRunner
     ):
@@ -26,12 +26,12 @@ class TestDockerCMD:
         )
         result = cli_fs_runner.invoke(
             cli,
-            ["-v", "scan", "docker", "ggshield-non-existant"],
+            ["-v", "secret", "scan", "docker", "ggshield-non-existant"],
         )
         assert result.exit_code == 0
 
-    @patch("ggshield.cmd.scan.docker.docker_save_to_tmp")
-    @patch("ggshield.cmd.scan.docker.docker_scan_archive")
+    @patch("ggshield.cmd.secret.scan.docker.docker_save_to_tmp")
+    @patch("ggshield.cmd.secret.scan.docker.docker_scan_archive")
     def test_docker_scan_abort(
         self, scan_mock: Mock, save_mock: Mock, cli_fs_runner: click.testing.CliRunner
     ):
@@ -41,13 +41,13 @@ class TestDockerCMD:
         )
         result = cli_fs_runner.invoke(
             cli,
-            ["-v", "scan", "docker", "ggshield-non-existant"],
+            ["-v", "secret", "scan", "docker", "ggshield-non-existant"],
         )
         assert result.output == ""
         assert result.exit_code == 0
 
-    @patch("ggshield.cmd.scan.docker.docker_save_to_tmp")
-    @patch("ggshield.cmd.scan.docker.docker_scan_archive")
+    @patch("ggshield.cmd.secret.scan.docker.docker_save_to_tmp")
+    @patch("ggshield.cmd.secret.scan.docker.docker_scan_archive")
     def test_docker_scan_failed_to_save(
         self, scan_mock: Mock, save_mock: Mock, cli_fs_runner: click.testing.CliRunner
     ):
@@ -59,7 +59,7 @@ class TestDockerCMD:
         )
         result = cli_fs_runner.invoke(
             cli,
-            ["-v", "scan", "docker", "ggshield-non-existant"],
+            ["-v", "secret", "scan", "docker", "ggshield-non-existant"],
         )
         assert 'Error: Image "ggshield-non-existant" not found\n' in result.output
         assert result.exit_code == 1
@@ -84,6 +84,7 @@ class TestDockerCMD:
                 cli,
                 [
                     "-v",
+                    "secret",
                     "scan",
                     "docker-archive",
                     str(image_path),

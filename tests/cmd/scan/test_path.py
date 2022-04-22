@@ -36,7 +36,7 @@ class TestPathScan:
         Path("file").write_text("This is a file with no secrets.")
         assert os.path.isfile("file")
 
-        result = cli_fs_runner.invoke(cli, ["-v", "scan", "path", "file"])
+        result = cli_fs_runner.invoke(cli, ["-v", "secret", "scan", "path", "file"])
         assert not result.exception
         assert "No secrets have been found" in result.output
 
@@ -45,7 +45,9 @@ class TestPathScan:
         assert os.path.isfile("file_secret")
 
         with my_vcr.use_cassette("test_scan_file_secret"):
-            result = cli_fs_runner.invoke(cli, ["-v", "scan", "path", "file_secret"])
+            result = cli_fs_runner.invoke(
+                cli, ["-v", "secret", "scan", "path", "file_secret"]
+            )
             assert result.exit_code == 1
             assert result.exception
             assert (
@@ -58,7 +60,9 @@ class TestPathScan:
         assert os.path.isfile("file_secret")
 
         with my_vcr.use_cassette("test_scan_file_secret_with_validity"):
-            result = cli_fs_runner.invoke(cli, ["-v", "scan", "path", "file_secret"])
+            result = cli_fs_runner.invoke(
+                cli, ["-v", "secret", "scan", "path", "file_secret"]
+            )
         assert result.exit_code == 1
         assert result.exception
         assert (
@@ -75,7 +79,7 @@ class TestPathScan:
         cassette_name = f"test_scan_file_secret-{validity}"
         with my_vcr.use_cassette(cassette_name):
             result = cli_fs_runner.invoke(
-                cli, ["-v", "scan", "--json", "path", "file_secret"]
+                cli, ["-v", "secret", "scan", "--json", "path", "file_secret"]
             )
         assert result.exit_code == 1
         assert result.exception
@@ -91,7 +95,7 @@ class TestPathScan:
 
         with my_vcr.use_cassette("test_scan_file_secret"):
             result = cli_fs_runner.invoke(
-                cli, ["scan", "--exit-zero", "-v", "path", "file_secret"]
+                cli, ["secret", "scan", "--exit-zero", "-v", "path", "file_secret"]
             )
             assert result.exit_code == 0
             assert not result.exception
@@ -99,7 +103,7 @@ class TestPathScan:
     def test_files_abort(self, cli_fs_runner):
         self.create_files()
         result = cli_fs_runner.invoke(
-            cli, ["scan", "path", "file1", "file2"], input="n\n"
+            cli, ["secret", "scan", "path", "file1", "file2"], input="n\n"
         )
         assert result.exit_code == 0
         assert not result.exception
@@ -108,7 +112,7 @@ class TestPathScan:
     def test_files_yes(self, cli_fs_runner):
         self.create_files()
         result = cli_fs_runner.invoke(
-            cli, ["scan", "path", "file1", "file2", "-r", "-y"]
+            cli, ["secret", "scan", "path", "file1", "file2", "-r", "-y"]
         )
         assert result.exit_code == 0
         assert not result.exception
@@ -119,7 +123,7 @@ class TestPathScan:
         self.create_files()
         result = cli_fs_runner.invoke(
             cli,
-            ["-v", "scan", "path", "file1", "file2", "-r"],
+            ["-v", "secret", "scan", "path", "file1", "file2", "-r"],
             input="y\n",
             catch_exceptions=True,
         )
@@ -132,7 +136,7 @@ class TestPathScan:
     def test_files_verbose_abort(self, cli_fs_runner):
         self.create_files()
         result = cli_fs_runner.invoke(
-            cli, ["-v", "scan", "path", "file1", "file2", "-r"], input="n\n"
+            cli, ["-v", "secret", "scan", "path", "file1", "file2", "-r"], input="n\n"
         )
         assert result.exit_code == 0
         assert not result.exception
@@ -141,7 +145,7 @@ class TestPathScan:
     def test_files_verbose_yes(self, cli_fs_runner):
         self.create_files()
         result = cli_fs_runner.invoke(
-            cli, ["-v", "scan", "path", "file1", "file2", "-r", "-y"]
+            cli, ["-v", "secret", "scan", "path", "file1", "file2", "-r", "-y"]
         )
         assert result.exit_code == 0
         assert not result.exception
@@ -192,7 +196,7 @@ class TestScanDirectory:
     def test_directory_verbose(self, cli_fs_runner):
         self.create_files()
         result = cli_fs_runner.invoke(
-            cli, ["-v", "scan", "path", "./", "-r"], input="y\n"
+            cli, ["-v", "secret", "scan", "path", "./", "-r"], input="y\n"
         )
         assert not result.exception
         assert "file1\n" in result.output
@@ -203,7 +207,7 @@ class TestScanDirectory:
     def test_directory_verbose_abort(self, cli_fs_runner):
         self.create_files()
         result = cli_fs_runner.invoke(
-            cli, ["-v", "scan", "path", "./", "-r"], input="n\n"
+            cli, ["-v", "secret", "scan", "path", "./", "-r"], input="n\n"
         )
         assert result.exit_code == 0
         assert not result.exception
@@ -215,6 +219,7 @@ class TestScanDirectory:
             cli,
             [
                 "-v",
+                "secret",
                 "scan",
                 "--exclude",
                 "file1",
@@ -235,7 +240,9 @@ class TestScanDirectory:
     @my_vcr.use_cassette()
     def test_directory_verbose_yes(self, cli_fs_runner):
         self.create_files()
-        result = cli_fs_runner.invoke(cli, ["-v", "scan", "path", "./", "-r", "-y"])
+        result = cli_fs_runner.invoke(
+            cli, ["-v", "secret", "scan", "path", "./", "-r", "-y"]
+        )
         assert not result.exception
         assert "file1\n" in result.output
         assert self.path_line("dir/file2") in result.output
@@ -259,7 +266,9 @@ class TestScanDirectory:
             "NPM_TOKEN=npm_xxxxxxxxxxxxxxxxxxxxxxxxxx"
         )
 
-        result = cli_fs_runner.invoke(cli, ["scan", "-v", "path", "--recursive", "."])
+        result = cli_fs_runner.invoke(
+            cli, ["secret", "scan", "-v", "path", "--recursive", "."]
+        )
         assert all(
             string in result.output
             for string in ["Do you want to continue", "not_committed"]
@@ -275,7 +284,9 @@ class TestScanDirectory:
         """
         path = create_normally_ignored_file()
 
-        result = cli_fs_runner.invoke(cli, ["scan", "-v", "path", "--recursive", "."])
+        result = cli_fs_runner.invoke(
+            cli, ["secret", "scan", "-v", "path", "--recursive", "."]
+        )
         assert str(path) not in result.output
         assert result.exit_code == 0
         assert result.exception is None
@@ -292,7 +303,7 @@ class TestScanDirectory:
 
         with my_vcr.use_cassette("ignore_default_excludes_from_configuration"):
             result = cli_fs_runner.invoke(
-                cli, ["scan", "-v", "path", "--recursive", "-y", "."]
+                cli, ["secret", "scan", "-v", "path", "--recursive", "-y", "."]
             )
         assert str(path) in result.output
         assert result.exit_code == 0
@@ -309,7 +320,15 @@ class TestScanDirectory:
         with my_vcr.use_cassette("ignore_default_excludes_from_flag"):
             result = cli_fs_runner.invoke(
                 cli,
-                ["scan", "-v", "--ignore-default-excludes", "path", "--recursive", "."],
+                [
+                    "secret",
+                    "scan",
+                    "-v",
+                    "--ignore-default-excludes",
+                    "path",
+                    "--recursive",
+                    ".",
+                ],
             )
         assert str(path) in result.output
         assert result.exit_code == 0
@@ -338,6 +357,7 @@ class TestScanDirectory:
             result = cli_fs_runner.invoke(
                 cli,
                 [
+                    "secret",
                     "scan",
                     "--exit-zero",
                     "-v",
