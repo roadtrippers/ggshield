@@ -1,12 +1,13 @@
 import json
 import os
+import re
 import urllib.parse as urlparse
 import webbrowser
 from base64 import urlsafe_b64encode
 from datetime import datetime
 from hashlib import sha256
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any, Dict, Optional, Type
+from typing import Any, Dict, Optional, Type, no_type_check
 
 import click
 import requests
@@ -24,6 +25,25 @@ SCOPE = "scan"
 # this is the largest band of not commonly occupied ports
 # https://stackoverflow.com/questions/10476987/best-tcp-port-number-range-for-internal-applications
 USABLE_PORT_RANGE = (29170, 29998)
+
+
+@no_type_check
+def get_pretty_date(dt: datetime) -> str:
+    """
+    convert the given datetime to the format September 1st 2022
+    """
+    str_dt = dt.strftime("%B %d %Y")
+    pattern = re.compile(r"\s\d{2}\s")
+
+    def make_ordinal(n: str) -> str:
+        n = int(n)
+        return " %d%s " % (
+            n,
+            {1: "st", 2: "nd", 3: "rd"}.get(n if n < 20 else n % 10, "th"),
+        )
+
+    # replace the day in month by its ordinal value (e.g. 1st, 2nd, 3rd, 4th...)
+    return pattern.sub(lambda m: make_ordinal(m.group()), str_dt)
 
 
 class OAuthClient:
@@ -69,7 +89,14 @@ class OAuthClient:
         self._prepare_server()
         self._redirect_to_login()
         self._wait_for_callback()
-        click.echo(f"Created Personal Access Token {self._token_name}")
+
+        message = f"Created Personal Access Token {self._token_name} "
+        expire_at = self.instance_config.account.expire_at
+        if expire_at is not None:
+            message += "expiring on " + get_pretty_date(expire_at)
+        else:
+            message += "with no expiry"
+        click.echo(message)
 
     def process_callback(self, callback_url: str) -> None:
         """

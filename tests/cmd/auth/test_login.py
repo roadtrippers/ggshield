@@ -1,7 +1,7 @@
 import json
 import urllib.parse as urlparse
-from datetime import datetime
-from typing import Any, Dict
+from datetime import datetime, timedelta
+from typing import Any, Dict, Optional
 from unittest.mock import Mock
 
 import pytest
@@ -9,7 +9,7 @@ from click import ClickException
 
 from ggshield.cmd.main import cli
 from ggshield.core.config import Config
-from ggshield.core.oauth import OAuthClient, OAuthError
+from ggshield.core.oauth import OAuthClient, OAuthError, get_pretty_date
 
 
 _TOKEN_RESPONSE_PAYLOAD = {
@@ -30,6 +30,8 @@ _EXPECTED_URL_PARAMS = {
     "utm_medium": ["login"],
     "utm_source": ["cli"],
 }
+
+DT_FORMAT = "%Y-%m-%dT%H:%M:%S%z"
 
 
 @pytest.fixture(autouse=True)
@@ -283,9 +285,14 @@ class TestAuthLoginWeb:
         self._assert_post_payload()
         self._client_get_mock.assert_called_once()
 
-        assert output.endswith(
-            f"\nCreated Personal Access Token {self._generated_token_name}\n"
-        )
+        message = f"\nCreated Personal Access Token {self._generated_token_name} "
+
+        if self._lifetime is None:
+            message += "with no expiry\n"
+        else:
+            message += "expiring on " + get_pretty_date(self._get_expiry_date()) + "\n"
+        assert output.endswith(message)
+
         self._assert_config("mysupertoken")
 
     def prepare_mocks(
@@ -351,12 +358,18 @@ class TestAuthLoginWeb:
         )
         monkeypatch.setattr("ggshield.core.oauth.HTTPServer", self._mock_server_class)
 
+        token_response_payload = {}
+        if is_exchange_ok:
+            token_response_payload = _TOKEN_RESPONSE_PAYLOAD.copy()
+            if lifetime is not None:
+                token_response_payload["expire_at"] = self._get_expiry_date()
+
         # mock api call to exchange the code against a valid access token
         self._client_post_mock = Mock(
             return_value=Mock(
                 ok=is_exchange_ok,
                 json=lambda: (
-                    {"key": token, **_TOKEN_RESPONSE_PAYLOAD} if is_exchange_ok else {}
+                    {"key": token, **token_response_payload} if is_exchange_ok else {}
                 ),
             )
         )
@@ -366,7 +379,7 @@ class TestAuthLoginWeb:
         self._client_get_mock = Mock(
             return_value=Mock(
                 ok=is_token_valid,
-                json=lambda: (_TOKEN_RESPONSE_PAYLOAD if is_token_valid else {}),
+                json=lambda: token_response_payload,
             )
         )
         monkeypatch.setattr("ggshield.core.client.GGClient.get", self._client_get_mock)
@@ -467,8 +480,11 @@ class TestAuthLoginWeb:
         assert "name" in request_body
         assert request_body["name"][0] == self._generated_token_name
 
-        assert "lifetime" in request_body
-        assert request_body["lifetime"][0] == str(self._lifetime)
+        if self._lifetime is None:
+            assert "lifetime" not in request_body
+        else:
+            assert "lifetime" in request_body
+            assert request_body["lifetime"][0] == str(self._lifetime)
 
     def _get_oauth_state(self):
         return urlparse.quote(
@@ -476,6 +492,17 @@ class TestAuthLoginWeb:
                 {"token_name": self._generated_token_name, "lifetime": self._lifetime}
             )
         )
+
+    def _get_expiry_date(self) -> Optional[datetime]:
+        """
+        Get the token expiry date based on the given lifetime
+        the date is offset to jan 1st 2100 for testing easy
+        """
+        if self._lifetime is not None:
+            return datetime.strptime("2100-01-01T00:00:00+0000", DT_FORMAT) + timedelta(
+                days=self._lifetime
+            )
+        return None
 
     @staticmethod
     def _get_oauth_client_class(callback_url):
