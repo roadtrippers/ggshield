@@ -1,9 +1,9 @@
 import os
 import re
 import subprocess
+import tempfile
 import traceback
 from enum import Enum
-from tempfile import mkstemp
 from typing import Iterable, List, NamedTuple
 from urllib.parse import ParseResult, urlparse
 
@@ -262,7 +262,7 @@ def handle_exception(e: Exception, verbose: bool) -> int:
 
 def load_sops_dotenv(env_file: str) -> None:
     """Uses mozilla/sops to decrypt .env file before loading into sys.environ."""
-    tmp_file = mkstemp()[1]
+    tmp_file = tempfile.mkstemp()[1]
     try:
         command = ["sops","-d","--output",tmp_file,env_file]
         subprocess.run(
@@ -290,7 +290,7 @@ def load_dot_env() -> None:
             real_dotenv_path = dotenv_path
         elif dotenv_path:
             display_error(
-                "GITGUARDIAN_DOTENV_LOCATION does not point to a valid .env file"
+                "GITGUARDIAN_DOTENV_PATH does not point to a valid .env file"
             )
             return
         elif os.path.isfile(cwd_env):
@@ -301,10 +301,11 @@ def load_dot_env() -> None:
                 real_dotenv_path = git_env_path
 
     # Check if the env file is encrypted with sops, and decrypt it if needed.
-    if "sops_version" in dotenv_values(real_dotenv_path).keys():
-        load_sops_dotenv(real_dotenv_path)
-    else:
-        load_dotenv(real_dotenv_path, override=True)
+    if real_dotenv_path:
+        if "sops_version" in dotenv_values(real_dotenv_path).keys():
+            load_sops_dotenv(real_dotenv_path)
+        else:
+            load_dotenv(real_dotenv_path, override=True)
 
 
 def clean_url(url: str, warn: bool = False) -> ParseResult:

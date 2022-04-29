@@ -1,4 +1,6 @@
 import os
+import subprocess
+import tempfile
 from unittest import mock
 
 import click
@@ -12,6 +14,7 @@ from ggshield.core.utils import (
     dashboard_to_api_url,
     find_match_indices,
     get_lines_from_content,
+    load_dot_env,
 )
 from ggshield.scan import Commit
 from ggshield.scan.scannable import File, Files
@@ -156,6 +159,93 @@ def test_retrieve_client_unknown_custom_dashboard_url(isolated_fs):
             config = Config()
             config.auth_config.current_instance = "https://example.com"
             retrieve_client(config)
+
+
+def test_parse_dotenv_file_from_path(monkeypatch, isolated_fs):
+    """
+    GIVEN a GITGUARDIAN_DOTENV_PATH value pointing to an unencrypted .env file
+    WHEN load_dot_env is called
+    THEN the environment variables are set in os.environ
+    """
+    with monkeypatch.context() as m:
+        m.delenv("GITGUARDIAN_API_KEY")
+
+        with tempfile.NamedTemporaryFile() as env_file:
+            env_file.write(b"GITGUARDIAN_API_KEY=key_parsed_from_dotenv_file")
+            # Complete writing to the file without closing it, as closing a NamedTemporaryFile deletes it
+            env_file.flush()
+            os.fsync(env_file.fileno())
+
+            with mock.patch.dict(os.environ, {"GITGUARDIAN_DOTENV_PATH": env_file.name}):
+                load_dot_env()
+                assert os.environ["GITGUARDIAN_API_KEY"] == "key_parsed_from_dotenv_file"
+
+
+def test_parse_dotenv_file_from_cwd(monkeypatch, isolated_fs):
+    """
+    GIVEN an unencrypted .env file in the current working directory
+    WHEN load_dot_env is called
+    THEN the environment variables are set in os.environ
+    """
+    with monkeypatch.context() as m:
+        m.delenv("GITGUARDIAN_API_KEY")
+
+        with open(".env",'w') as env_file:
+            env_file.write("GITGUARDIAN_API_KEY=key_parsed_from_dotenv_file_in_cwd")
+
+        try:
+            with mock.patch.dict(os.environ, {"GITGUARDIAN_DOTENV_PATH": env_file.name}):
+                load_dot_env()
+                assert os.environ["GITGUARDIAN_API_KEY"] == "key_parsed_from_dotenv_file_in_cwd"
+        except:
+            raise
+        finally:
+            os.remove(".env")
+
+
+def test_parse_sops_encrypted_dotenv_file(monkeypatch, isolated_fs):
+    """
+    GIVEN a .env file encrypted with sops
+    WHEN load_dotenv is called
+    THEN the .env file is decrypted and the environment variables are set in os.environ
+    """
+    encrypted_file_name = "encrypted.env"
+    decrypted_file_name = "decrypted.env"
+    with monkeypatch.context() as m:
+        m.delenv("GITGUARDIAN_API_KEY")
+
+        with open(encrypted_file_name,'w') as f:
+            f.write("GITGUARDIAN_API_KEY=encrypted_key_from_sops_dotenv\n")
+            f.write("sops_version=3.7.2")
+        with open(decrypted_file_name,'w') as f:
+            f.write("GITGUARDIAN_API_KEY=decrypted_key_from_sops_dotenv")
+
+        try:
+            with mock.patch.dict(os.environ, {"GITGUARDIAN_DOTENV_PATH": encrypted_file_name}):
+                with mock.patch("subprocess.run") as mock_run, mock.patch("tempfile.mkstemp") as mock_mkstemp:
+                    # Force mkstemp to return an expected value, pointing to our "decrypted" file
+                    mock_mkstemp.side_effect = [(0, decrypted_file_name)]
+
+                    load_dot_env()
+
+                    mock_mkstemp.assert_called_once()
+                    mock_run.assert_called_once_with(
+                        ["sops","-d","--output",decrypted_file_name,encrypted_file_name],
+                        check=True,
+                        stderr=subprocess.PIPE,
+                    )
+
+                    assert os.environ["GITGUARDIAN_API_KEY"] == "decrypted_key_from_sops_dotenv"
+        except:
+            raise
+        finally:
+            os.remove(encrypted_file_name)
+            # The "decrypted" file should already be deleted by load_sops_dotenv, since it's a temporary file.
+            # Just in case it's not, we'll try to remove it here.
+            try:
+                os.remove(decrypted_file_name)
+            except:
+                pass
 
 
 class TestAPIDashboardURL:
