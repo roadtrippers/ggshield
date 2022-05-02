@@ -1,12 +1,14 @@
 import os
 import re
+import subprocess
+import tempfile
 import traceback
 from enum import Enum
 from typing import Iterable, List, NamedTuple
 from urllib.parse import ParseResult, urlparse
 
 import click
-from dotenv import load_dotenv
+from dotenv import load_dotenv, dotenv_values
 from pygitguardian.models import Match
 
 from ggshield.core.constants import ON_PREMISE_API_URL_PATH_PREFIX
@@ -258,26 +260,52 @@ def handle_exception(e: Exception, verbose: bool) -> int:
             traceback.print_exc()
         raise click.ClickException(str(e))
 
+def load_sops_dotenv(env_file: str) -> None:
+    """Uses mozilla/sops to decrypt .env file before loading into sys.environ."""
+    tmp_file = tempfile.mkstemp()[1]
+    try:
+        command = ["sops","-d","--output",tmp_file,env_file]
+        subprocess.run(
+            command,
+            check=True,
+            stderr=subprocess.PIPE
+        )
+        load_dotenv(tmp_file, override=True)
+    except:
+        display_error(
+            "Error decrypting .env file with sops"
+        )
+    finally:
+        os.remove(tmp_file)
+
 
 def load_dot_env() -> None:
     """Loads .env file into sys.environ."""
     dont_load_env = os.getenv("GITGUARDIAN_DONT_LOAD_ENV", False)
     dotenv_path = os.getenv("GITGUARDIAN_DOTENV_PATH", None)
     cwd_env = os.path.join("..", ".env")
+    real_dotenv_path = None
     if not dont_load_env:
         if dotenv_path and os.path.isfile(dotenv_path):
-            load_dotenv(dotenv_path, override=True)
-            return
+            real_dotenv_path = dotenv_path
         elif dotenv_path:
             display_error(
-                "GITGUARDIAN_DOTENV_LOCATION does not point to a valid .env file"
+                "GITGUARDIAN_DOTENV_PATH does not point to a valid .env file"
             )
-        if os.path.isfile(cwd_env):
-            load_dotenv(cwd_env, override=True)
             return
-        if is_git_dir() and os.path.isfile(os.path.join(get_git_root(), ".env")):
-            load_dotenv(os.path.join(get_git_root(), ".env"), override=True)
-            return
+        elif os.path.isfile(cwd_env):
+            real_dotenv_path = cwd_env
+        elif is_git_dir():
+            git_env_path = os.path.join(get_git_root(), ".env")
+            if os.path.isfile(git_env_path):
+                real_dotenv_path = git_env_path
+
+    # Check if the env file is encrypted with sops, and decrypt it if needed.
+    if real_dotenv_path:
+        if "sops_version" in dotenv_values(real_dotenv_path).keys():
+            load_sops_dotenv(real_dotenv_path)
+        else:
+            load_dotenv(real_dotenv_path, override=True)
 
 
 def clean_url(url: str, warn: bool = False) -> ParseResult:
